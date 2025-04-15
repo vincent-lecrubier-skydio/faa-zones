@@ -389,51 +389,57 @@ def main():
     location = st.text_input(
         "Location Address or Coordinates (lat,lon)", key="location")
 
-    coords = forward_geocode(location)
-
-    center_lat = None
-    center_lon = None
-    if coords:
-        center_lat = coords[1]
-        center_lon = coords[0]
-    else:
-        lat_lon = parse_lat_lon(location)
-        if lat_lon:
-            center_lat, center_lon = lat_lon
-    if center_lat is None or center_lon is None:
-        st.error(
-            "Invalid location. Please enter a valid address or coordinates (lat,lon)")
-        del st.query_params["location"]
+    if not location:
+        st.error("Please enter a location.")
         return
-    else:
-        st.query_params["location"] = location
 
-    st.markdown(f"""
-        Location Coordinates:
+    with st.expander("Location Details", expanded=False):
 
-        ```python
-        {center_lat}, {center_lon}
-        ```
-        """)
+        radius_mi = st.number_input(
+            "Radius around location (mi)", value=30.0, step=0.1)
 
-    radius_mi = st.number_input(
-        "Radius around location (mi)", value=30.0, step=0.1)
+        coords = forward_geocode(location)
 
-    # Calculate bounding box
-    minx, miny, maxx, maxy = calculate_bounding_box(
-        center_lat, center_lon, radius_mi)
+        center_lat = None
+        center_lon = None
+        if coords:
+            center_lat = coords[1]
+            center_lon = coords[0]
+        else:
+            lat_lon = parse_lat_lon(location)
+            if lat_lon:
+                center_lat, center_lon = lat_lon
+        if center_lat is None or center_lon is None:
+            st.error(
+                "Invalid location. Please enter a valid address or coordinates (lat,lon)")
+            del st.query_params["location"]
+            return
+        else:
+            st.query_params["location"] = location
 
-    # For display, reorder as north, west, south, east
-    north, west, south, east = maxy, minx, miny, maxx
-    region_bbox = (west, south, east, north)
+        st.markdown(f"""
+            Location center point coordinates:
 
-    st.markdown(f"""
-        Bounding Box (north, west, south, east):
-        
-        ```python
-        {north:.6f}, {west:.6f}, {south:.6f}, {east:.6f}
-        ```
-        """)
+            ```python
+            {center_lat}, {center_lon}
+            ```
+            """)
+
+        # Calculate bounding box
+        minx, miny, maxx, maxy = calculate_bounding_box(
+            center_lat, center_lon, radius_mi)
+
+        # For display, reorder as north, west, south, east
+        north, west, south, east = maxy, minx, miny, maxx
+        region_bbox = (west, south, east, north)
+
+        st.markdown(f"""
+            Bounding Box (north, west, south, east):
+            
+            ```python
+            {north:.6f}, {west:.6f}, {south:.6f}, {east:.6f}
+            ```
+            """)
 
     # Add a button to download FAA data
     if st.button("Get data for this region from FAA ➡️"):
@@ -467,9 +473,6 @@ def main():
                     file_name=filename,
                     mime="application/json"
                 )
-
-        # Add combined download button for the specific files
-        st.subheader("Combined Download")
 
         # Find the requested files
         combined_files = {}
