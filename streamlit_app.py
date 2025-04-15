@@ -502,6 +502,11 @@ def main():
                 mime="application/json",
                 help="Combines FAA 0ft Facility Map and DoD Mar 13 zones into a single geojson with red styling"
             )
+            st.markdown(
+                """
+                You can open these geojson files in [geojson.io](https://geojson.io) or GIS software like QGIS or ArcGIS.
+                """
+            )
         else:
             st.info(
                 "Download data first to generate combined restricted zones file.")
