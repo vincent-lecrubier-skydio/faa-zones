@@ -335,6 +335,37 @@ def get_faa_data_all_layers(region_bbox: Tuple[float, float, float, float], sess
     return results
 
 
+def combine_geojson_files(files_dict, style_properties=None):
+    """
+    Combine multiple GeoJSON files into a single GeoJSON with optional style properties.
+
+    Args:
+        files_dict: Dictionary of {file_name: file_content_bytes}
+        style_properties: Dictionary of simplestyle properties to add to features
+
+    Returns:
+        Combined GeoJSON as bytes
+    """
+    combined = {"type": "FeatureCollection", "features": []}
+
+    for name, content_bytes in files_dict.items():
+        try:
+            content = json.loads(content_bytes.decode('utf-8'))
+            if "features" in content and isinstance(content["features"], list):
+                for feature in content["features"]:
+                    # Add style properties if provided
+                    if style_properties and isinstance(style_properties, dict):
+                        if "properties" not in feature:
+                            feature["properties"] = {}
+                        feature["properties"].update(style_properties)
+                    combined["features"].append(feature)
+        except Exception as e:
+            print(f"Error processing {name}: {str(e)}")
+            continue
+
+    return json.dumps(combined).encode('utf-8')
+
+
 def main():
     st.set_page_config(page_title="FAA Zones GeoJSON downloader",
                        page_icon="🛩️", layout="wide")
@@ -405,7 +436,7 @@ def main():
         """)
 
     # Add a button to download FAA data
-    if st.button("Download FAA Data for This Region"):
+    if st.button("Get data for this region from FAA ➡️"):
         # Create a progress bar
         progress_bar = st.progress(0, text="Preparing to download FAA data...")
 
@@ -427,15 +458,50 @@ def main():
 
     # Display download buttons for any available files
     if st.session_state.downloaded_files:
-        st.subheader("Downloaded Files")
+        with st.expander("Downloaded Files Details", expanded=False):
+            for filename, file_content, display_name, feature_count in st.session_state.downloaded_files:
+                # Create a download button for each file
+                st.download_button(
+                    label=f"📄 {display_name} ({feature_count} features)",
+                    data=file_content,
+                    file_name=filename,
+                    mime="application/json"
+                )
+
+        # Add combined download button for the specific files
+        st.subheader("Combined Download")
+
+        # Find the requested files
+        combined_files = {}
         for filename, file_content, display_name, feature_count in st.session_state.downloaded_files:
-            # Create a download button for each file
+            if 'faa_uas_facility_map_0ft' in filename or 'faa_dod_mar_13' in filename:
+                combined_files[filename] = file_content
+
+        if len(combined_files) > 0:
+            # Define simplestyle properties (red contours, red fill with 0.1 opacity)
+            style_properties = {
+                "stroke": "#FF0000",        # Red outline
+                "stroke-width": 2,          # Line width
+                "stroke-opacity": 1.0,      # Fully opaque outline
+                "fill": "#FF0000",          # Red fill
+                "fill-opacity": 0.1         # 10% opacity for fill
+            }
+
+            # Combine the files with styling
+            combined_geojson = combine_geojson_files(
+                combined_files, style_properties)
+
+            # Create a download button for the combined file
             st.download_button(
-                label=f"Download {display_name} ({feature_count} features)",
-                data=file_content,
-                file_name=filename,
-                mime="application/json"
+                label="📥 Download FAA Restricted Zones",
+                data=combined_geojson,
+                file_name=f"combined_restricted_zones_{st.session_state.session_id}.geojson",
+                mime="application/json",
+                help="Combines FAA 0ft Facility Map and DoD Mar 13 zones into a single geojson with red styling"
             )
+        else:
+            st.info(
+                "Download data first to generate combined restricted zones file.")
 
 
 main()
