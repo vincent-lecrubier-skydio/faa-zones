@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import tempfile
 from datetime import datetime, timedelta
 import pydeck as pdk
 import httpx
@@ -13,6 +14,7 @@ import requests
 import json
 import pandas as pd
 import time
+import uuid
 from typing import Tuple, Optional, Dict, List, Any
 from mapbox_util import forward_geocode
 
@@ -150,7 +152,7 @@ def save_to_geojson(processed_feature, output_file, append=False):
         print(f"Started new GeoJSON output file: {output_file}")
 
 
-def get_faa_data(
+def get_faa_data_single_layer(
     url_template: str,
     minx: float,
     miny: float,
@@ -158,16 +160,17 @@ def get_faa_data(
     maxy: float,
     dataset_name: str,
     output_file: str,
-) -> bool:
+    progress_callback=None,
+) -> Tuple[bool, int]:
     """
     Fetch FAA data for a given bounding box and dataset.
     Writes features to a standard GeoJSON file.
-    Returns True if successful, False otherwise.
+    Returns (success_status, feature_count)
     """
     print(f"\nRequesting {dataset_name} data...")
     # Validate bounding box
     if not validate_bbox(minx, miny, maxx, maxy):
-        return False
+        return False, 0
     if isinstance(url_template, tuple):
         url_template = "".join(url_template)
 
@@ -196,7 +199,7 @@ def get_faa_data(
 
             if not features and result_offset == 0:
                 print("No features found in response")
-                return False
+                return False, 0
 
             # Process features and add to collection
             for feature in features:
@@ -227,6 +230,9 @@ def get_faa_data(
             else:
                 result_offset += result_record_count
                 print(f"  Processed {feature_count} features so far...")
+                # Update progress if callback is provided
+                if progress_callback:
+                    progress_callback(dataset_name, feature_count)
                 # Add a small delay between pagination requests
                 time.sleep(0.5)
 
@@ -234,7 +240,7 @@ def get_faa_data(
             print(f"Request failed: {str(e)}")
             if "response" in locals() and hasattr(response, "text"):
                 print("Response content:", response.text)
-            return False
+            return False, 0
 
     # Write the complete GeoJSON to file
     if feature_count > 0:
@@ -243,17 +249,20 @@ def get_faa_data(
         print(
             f"Successfully wrote a total of {feature_count} features to {output_file}"
         )
-        return True
+        return True, feature_count
     else:
         print(f"No features to write for {dataset_name}")
-        return False
+        return False, 0
 
 
-def main(region_bbox: Tuple[float, float, float, float]):
+def get_faa_data_all_layers(region_bbox: Tuple[float, float, float, float], session_id: str, progress_bar=None):
     """
     Fetch FAA drone airspace data for a given bounding box and save to separate GeoJSON files.
 
     :param region_bbox: (minx, miny, maxx, maxy) bounding box coordinates
+    :param session_id: Unique session ID to avoid filename collisions
+    :param progress_bar: Optional progress bar to update during processing
+    :return: List of tuples (filename, file_content, display_name, feature_count)
     """
     # Define all data sources
     data_sources = [
@@ -269,14 +278,61 @@ def main(region_bbox: Tuple[float, float, float, float]):
         (FAA_UAS_FacilityMap_0ft_url_template, "faa_uas_facility_map_0ft"),
     ]
 
+    # Create a temporary directory for this session
+    temp_dir = tempfile.mkdtemp()
+    results = []
+    feature_counts = {}
+    total_sources = len(data_sources)
+
+    # Setup progress tracking
+    if progress_bar:
+        progress_bar.progress(0, text="Starting download...")
+
+    # Function to update progress
+    def update_progress(dataset_name, count):
+        feature_counts[dataset_name] = count
+        if progress_bar:
+            current_progress = len(feature_counts) / total_sources
+            progress_text = f"Processing {dataset_name}: {count} features found"
+            progress_bar.progress(current_progress, text=progress_text)
+
     # Fetch and save data from each source
-    for url_template, name in data_sources:
-        output_file = f"{name}.geojson"
-        success = get_faa_data(url_template, *region_bbox, name, output_file)
-        if not success:
+    for idx, (url_template, name) in enumerate(data_sources):
+        if progress_bar:
+            progress_text = f"Downloading {name}... ({idx+1}/{total_sources})"
+            progress_bar.progress((idx) / total_sources, text=progress_text)
+
+        # Create a unique filename for this dataset in this session
+        unique_filename = f"{name}_{session_id}.geojson"
+        output_file = os.path.join(temp_dir, unique_filename)
+
+        success, feature_count = get_faa_data_single_layer(
+            url_template,
+            *region_bbox,
+            name,
+            output_file,
+            progress_callback=update_progress
+        )
+
+        if success and feature_count > 0:
+            # Read the file content
+            with open(output_file, 'rb') as f:
+                file_content = f.read()
+
+            # Add to results with display name that includes feature count
+            display_name = f"{name.replace('_', ' ').title()}"
+            results.append((unique_filename, file_content,
+                           display_name, feature_count))
+        elif not success:
             print(f"Failed to retrieve data for {name}")
+
         # Add a delay between requests to be considerate of the FAA's servers
         time.sleep(1)
+
+    if progress_bar:
+        progress_bar.progress(1.0, text="Download complete!")
+
+    return results
 
 
 def main():
@@ -284,6 +340,13 @@ def main():
                        page_icon="🛩️", layout="wide")
 
     st.title("🛩️ FAA Zones GeoJSON Downloader")
+
+    # Initialize session state for storing downloaded files if not already present
+    if 'downloaded_files' not in st.session_state:
+        st.session_state.downloaded_files = []
+
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
 
     if "location" not in st.session_state:
         if "location" in st.query_params:
@@ -340,6 +403,39 @@ def main():
         {north:.6f}, {west:.6f}, {south:.6f}, {east:.6f}
         ```
         """)
+
+    # Add a button to download FAA data
+    if st.button("Download FAA Data for This Region"):
+        # Create a progress bar
+        progress_bar = st.progress(0, text="Preparing to download FAA data...")
+
+        with st.spinner("Downloading FAA data for the region... This may take a minute or two."):
+            # We need to convert from west, south, east, north to minx, miny, maxx, maxy
+            minx, miny, maxx, maxy = west, south, east, north
+
+            # Call the function to download all layers
+            downloaded_files = get_faa_data_all_layers(
+                (minx, miny, maxx, maxy),
+                st.session_state.session_id,
+                progress_bar
+            )
+
+            # Store the results in session state
+            st.session_state.downloaded_files = downloaded_files
+
+            st.success("FAA data downloaded successfully!")
+
+    # Display download buttons for any available files
+    if st.session_state.downloaded_files:
+        st.subheader("Downloaded Files")
+        for filename, file_content, display_name, feature_count in st.session_state.downloaded_files:
+            # Create a download button for each file
+            st.download_button(
+                label=f"Download {display_name} ({feature_count} features)",
+                data=file_content,
+                file_name=filename,
+                mime="application/json"
+            )
 
 
 main()
