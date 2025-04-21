@@ -382,16 +382,6 @@ def main():
         radius_mi = st.number_input(
             "Radius around location (mi)", value=30.0, step=0.1)
 
-        # Add slider for maximum height in feet
-        height_ft = st.slider(
-            "Maximum ceiling height (ft)",
-            min_value=0,
-            max_value=600,
-            value=0,
-            step=10,
-            help="Filter UAS Facility Map data for areas with ceiling at or below this height"
-        )
-
         coords = forward_geocode(location)
 
         center_lat = None
@@ -434,6 +424,16 @@ def main():
             {north:.6f}, {west:.6f}, {south:.6f}, {east:.6f}
             ```
             """)
+
+    # Add slider for maximum height in feet (moved outside the expander)
+    height_ft = st.slider(
+        "Get FAA UAS Facility Map data with ceiling at or below (ft)",
+        min_value=0,
+        max_value=600,
+        value=0,
+        step=10,
+        help="Filter UAS Facility Map data for areas with ceiling at or below this height"
+    )
 
     # Add a button to download FAA data
     if st.button("Get data for this region from FAA ➡️"):
