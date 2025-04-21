@@ -52,72 +52,6 @@ def calculate_bounding_box(lat: float, lon: float, radius_miles: float) -> Tuple
     return (minx, miny, maxx, maxy)
 
 
-# FAA ArcGIS FeatureServer Query API URL
-FAA_UAS_FacilityMap_Data_url_template = (
-    "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
-    "FAA_UAS_FacilityMap_Data/FeatureServer/0/query?"
-    "where=1%3D1&outFields=*&"
-    "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
-    "&geometryType=esriGeometryEnvelope&inSR=4326"
-    "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
-)
-
-Prohibited_Areas_url_template = (
-    "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
-    "Prohibited_Areas/FeatureServer/0/query?"
-    "where=1%3D1&outFields=*&"
-    "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
-    "&geometryType=esriGeometryEnvelope&inSR=4326"
-    "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
-)
-
-Recreational_Flyer_Fixed_Sites_url_template = (
-    "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
-    "Recreational_Flyer_Fixed_Sites/FeatureServer/0/query?"
-    "where=1%3D1&outFields=*&"
-    "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
-    "&geometryType=esriGeometryEnvelope&inSR=4326"
-    "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
-)
-
-Part_Time_National_Security_UAS_Flight_Restrictions_url_template = (
-    "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
-    "Part_Time_National_Security_UAS_Flight_Restrictions/FeatureServer/0/query?"
-    "where=1%3D1&outFields=*&"
-    "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
-    "&geometryType=esriGeometryEnvelope&inSR=4326"
-    "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
-)
-
-FAA_Recognized_Identification_Areas_url_template = (
-    "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
-    "FAA_Recognized_Identification_Areas/FeatureServer/0/query?"
-    "where=1%3D1&outFields=*&"
-    "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
-    "&geometryType=esriGeometryEnvelope&inSR=4326"
-    "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
-)
-
-DoD_Mar_13_url_template = (
-    "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
-    "DoD_Mar_13/FeatureServer/0/query?"
-    "where=1%3D1&outFields=*&"
-    "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
-    "&geometryType=esriGeometryEnvelope&inSR=4326"
-    "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
-)
-
-
-FAA_UAS_FacilityMap_0ft_url_template = (
-    "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
-    "FAA_UAS_FacilityMap_Data/FeatureServer/0/query?"
-    "where=CEILING%3D0&outFields=*&"
-    "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
-    "&geometryType=esriGeometryEnvelope&inSR=4326"
-    "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
-)
-
-
 def validate_bbox(minx: float, miny: float, maxx: float, maxy: float) -> bool:
     """Validate bounding box coordinates."""
     if not all(isinstance(x, (int, float)) for x in [minx, miny, maxx, maxy]):
@@ -255,28 +189,78 @@ def get_faa_data_single_layer(
         return False, 0
 
 
-def get_faa_data_all_layers(region_bbox: Tuple[float, float, float, float], session_id: str, progress_bar=None):
+def get_faa_data_all_layers(region_bbox: Tuple[float, float, float, float], session_id: str, height_ft: int = 0, progress_bar=None):
     """
     Fetch FAA drone airspace data for a given bounding box and save to separate GeoJSON files.
 
     :param region_bbox: (minx, miny, maxx, maxy) bounding box coordinates
     :param session_id: Unique session ID to avoid filename collisions
+    :param height_ft: Maximum ceiling height in feet for UAS facility map data (0-600)
     :param progress_bar: Optional progress bar to update during processing
     :return: List of tuples (filename, file_content, display_name, feature_count)
     """
-    # Define all data sources
-    data_sources = [
-        (FAA_UAS_FacilityMap_Data_url_template, "faa_uas_facility_map"),
-        (Prohibited_Areas_url_template, "faa_prohibited_areas"),
-        (Recreational_Flyer_Fixed_Sites_url_template, "faa_recreational_sites"),
-        (
-            Part_Time_National_Security_UAS_Flight_Restrictions_url_template,
-            "faa_national_security",
+    # Define all data sources with inline URL templates as a dictionary with names as keys
+    data_sources = {
+        "faa_uas_facility_map": (
+            "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
+            "FAA_UAS_FacilityMap_Data/FeatureServer/0/query?"
+            "where=1%3D1&outFields=*&"
+            "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
+            "&geometryType=esriGeometryEnvelope&inSR=4326"
+            "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
         ),
-        (FAA_Recognized_Identification_Areas_url_template, "faa_identification_areas"),
-        (DoD_Mar_13_url_template, "faa_dod_mar_13"),
-        (FAA_UAS_FacilityMap_0ft_url_template, "faa_uas_facility_map_0ft"),
-    ]
+        "faa_prohibited_areas": (
+            "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
+            "Prohibited_Areas/FeatureServer/0/query?"
+            "where=1%3D1&outFields=*&"
+            "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
+            "&geometryType=esriGeometryEnvelope&inSR=4326"
+            "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
+        ),
+        "faa_recreational_sites": (
+            "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
+            "Recreational_Flyer_Fixed_Sites/FeatureServer/0/query?"
+            "where=1%3D1&outFields=*&"
+            "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
+            "&geometryType=esriGeometryEnvelope&inSR=4326"
+            "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
+        ),
+        "faa_national_security": (
+            "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
+            "Part_Time_National_Security_UAS_Flight_Restrictions/FeatureServer/0/query?"
+            "where=1%3D1&outFields=*&"
+            "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
+            "&geometryType=esriGeometryEnvelope&inSR=4326"
+            "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
+        ),
+        "faa_identification_areas": (
+            "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
+            "FAA_Recognized_Identification_Areas/FeatureServer/0/query?"
+            "where=1%3D1&outFields=*&"
+            "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
+            "&geometryType=esriGeometryEnvelope&inSR=4326"
+            "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
+        ),
+        "faa_dod_mar_13": (
+            "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
+            "DoD_Mar_13/FeatureServer/0/query?"
+            "where=1%3D1&outFields=*&"
+            "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
+            "&geometryType=esriGeometryEnvelope&inSR=4326"
+            "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
+        ),
+    }
+
+    # Add height-based UAS facility map entry
+    height_layer_name = f"faa_uas_facility_map_under_{height_ft}ft"
+    data_sources[height_layer_name] = (
+        "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/"
+        "FAA_UAS_FacilityMap_Data/FeatureServer/0/query?"
+        f"where=CEILING%3C%3D{height_ft}&outFields=*&"
+        "geometry=%7B%22xmin%22%3A{}%2C%22ymin%22%3A{}%2C%22xmax%22%3A{}%2C%22ymax%22%3A{}%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D"
+        "&geometryType=esriGeometryEnvelope&inSR=4326"
+        "&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
+    )
 
     # Create a temporary directory for this session
     temp_dir = tempfile.mkdtemp()
@@ -297,7 +281,7 @@ def get_faa_data_all_layers(region_bbox: Tuple[float, float, float, float], sess
             progress_bar.progress(current_progress, text=progress_text)
 
     # Fetch and save data from each source
-    for idx, (url_template, name) in enumerate(data_sources):
+    for idx, (name, url_template) in enumerate(data_sources.items()):
         if progress_bar:
             progress_text = f"Downloading {name}... ({idx+1}/{total_sources})"
             progress_bar.progress((idx) / total_sources, text=progress_text)
@@ -398,6 +382,16 @@ def main():
         radius_mi = st.number_input(
             "Radius around location (mi)", value=30.0, step=0.1)
 
+        # Add slider for maximum height in feet
+        height_ft = st.slider(
+            "Maximum ceiling height (ft)",
+            min_value=0,
+            max_value=600,
+            value=0,
+            step=10,
+            help="Filter UAS Facility Map data for areas with ceiling at or below this height"
+        )
+
         coords = forward_geocode(location)
 
         center_lat = None
@@ -454,6 +448,7 @@ def main():
             downloaded_files = get_faa_data_all_layers(
                 (minx, miny, maxx, maxy),
                 st.session_state.session_id,
+                height_ft,
                 progress_bar
             )
 
@@ -477,7 +472,8 @@ def main():
         # Find the requested files
         combined_files = {}
         for filename, file_content, display_name, feature_count in st.session_state.downloaded_files:
-            if 'faa_uas_facility_map_0ft' in filename or 'faa_dod_mar_13' in filename:
+            # Use startswith to match any height-based layer
+            if filename.startswith(f'faa_uas_facility_map_under_') or 'faa_dod_mar_13' in filename:
                 combined_files[filename] = file_content
 
         if len(combined_files) > 0:
